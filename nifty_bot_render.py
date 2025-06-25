@@ -43,22 +43,28 @@ def get_technical_summary():
         if df is None or df.empty:
             return "No data received from yfinance (market closed or blocked)."
         df.dropna(inplace=True)
-    except Exception as e:
-        return f"Error downloading data: {str(e)}"
 
-    try:
-        close = df["Close"].squeeze()
+        close = df["Close"]
         last_price = close.iloc[-1]
+
         rsi = RSIIndicator(close).rsi().iloc[-1]
-        macd = MACD(close.squeeze())
+        macd = MACD(close)
+        macd_line = macd.macd().iloc[-1]
+        macd_signal = macd.macd_signal().iloc[-1]
+
         ema5 = close.ewm(span=5).mean().iloc[-1]
         ema20 = close.ewm(span=20).mean().iloc[-1]
         ema200 = close.ewm(span=200).mean().iloc[-1]
+
         df["VWAP"] = (df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3).cumsum() / df["Volume"].cumsum()
         vwap = df["VWAP"].iloc[-1]
+
         avg_vol = df["Volume"].rolling(20).mean().iloc[-2]
-        spike = "Yes" if df["Volume"].iloc[-2] > avg_vol * 1.5 else "No"
+        volume_spike = "Yes" if df["Volume"].iloc[-2] > avg_vol * 1.5 else "No"
+
         supertrend, st_dir = calculate_supertrend(df)
+        st_signal = "BUY" if st_dir.iloc[-1] == 1 else "SELL"
+
         trend = "Bullish" if ema5 > ema20 > ema200 else "Bearish"
         vix = get_vix()
         fii = get_fii_dii_data()
@@ -69,11 +75,11 @@ Trend: {trend}
 
 Indicators:
 - RSI: {rsi:.2f}
-- MACD: {macd.macd().iloc[-1]:.2f} / {macd.macd_signal().iloc[-1]:.2f}
+- MACD: {macd_line:.2f} / {macd_signal:.2f}
 - EMA: 5({ema5:.2f}), 20({ema20:.2f}), 200({ema200:.2f})
 - VWAP: {vwap:.2f}
-- Volume Spike: {spike}
-- SuperTrend: {supertrend.iloc[-1]:.2f} ({'BUY' if st_dir.iloc[-1]==1 else 'SELL'})
+- Volume Spike: {volume_spike}
+- SuperTrend: {supertrend.iloc[-1]:.2f} ({st_signal})
 
 VIX: {vix if vix else 'Unavailable'}
 {fii}
