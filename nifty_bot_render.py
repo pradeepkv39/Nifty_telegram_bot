@@ -47,10 +47,10 @@ def get_technical_summary():
         return f"Error downloading data: {str(e)}"
 
     try:
-        close = df["Close"]
+        close = df["Close"].squeeze()
         last_price = close.iloc[-1]
         rsi = RSIIndicator(close).rsi().iloc[-1]
-        macd = MACD(close)
+        macd = MACD(close.squeeze())
         ema5 = close.ewm(span=5).mean().iloc[-1]
         ema20 = close.ewm(span=20).mean().iloc[-1]
         ema200 = close.ewm(span=200).mean().iloc[-1]
