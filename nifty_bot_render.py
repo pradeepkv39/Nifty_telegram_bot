@@ -52,9 +52,9 @@ def get_technical_summary():
         macd_line = macd.macd().iloc[-1]
         macd_signal = macd.macd_signal().iloc[-1]
 
-        ema5 = close.ewm(span=5).mean().iloc[-1]
-        ema20 = close.ewm(span=20).mean().iloc[-1]
-        ema200 = close.ewm(span=200).mean().iloc[-1]
+        ema5 = float(close.ewm(span=5).mean().iloc[-1])
+        ema20 = float(close.ewm(span=20).mean().iloc[-1])
+        ema200 = float(close.ewm(span=200).mean().iloc[-1])
 
         df["VWAP"] = (df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3).cumsum() / df["Volume"].cumsum()
         vwap = df["VWAP"].iloc[-1]
