@@ -37,21 +37,30 @@ def get_nifty_summary():
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             "Accept": "application/json",
             "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://www.nseindia.com/"
+            "Referer": "https://www.nseindia.com/",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
         })
 
-        # Hit NSE homepage once to get cookies
+        # 1️⃣ First get cookies by visiting homepage
         session.get("https://www.nseindia.com", timeout=10)
 
-        # Get option chain snapshot with live spot price
+        # 2️⃣ Now request live Option Chain data
         response = session.get(
             "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY",
             timeout=10
         )
-        data = response.json()
-        spot_price = float(data["records"]["underlyingValue"])
 
-        # Approximate previous close from change in CE (not exact, but works)
+        if response.status_code != 200:
+            return f"❌ NSE API failed. Status: {response.status_code}"
+
+        try:
+            data = response.json()
+        except:
+            return "❌ NSE response not in JSON format. Possibly blocked."
+
+        # 3️⃣ Extract spot price and estimate previous close
+        spot_price = float(data["records"]["underlyingValue"])
         try:
             prev_close = spot_price - float(data["filtered"]["data"][0]["CE"]["change"])
         except:
@@ -61,6 +70,7 @@ def get_nifty_summary():
         support = f"{spot_price - 70:.0f} / {spot_price - 120:.0f}"
         resistance = f"{spot_price + 70:.0f} / {spot_price + 120:.0f}"
 
+        # 4️⃣ Compose message
         msg = f"""📊 *Nifty 50 Live Analysis* – {datetime.now().strftime('%A, %d %B %Y • %H:%M')}
 *Spot Price:* ₹{spot_price:.2f}
 *Trend:* {trend}
