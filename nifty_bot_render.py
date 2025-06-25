@@ -1,23 +1,22 @@
 from flask import Flask
-from datetime import datetime
-import yfinance as yf
-import pandas as pd
-import numpy as np
 import requests
 from bs4 import BeautifulSoup
-from ta.momentum import RSIIndicator
-from ta.trend import MACD
+from datetime import datetime
 
 # --- CONFIG ---
 BOT_TOKEN = "7974119756:AAESnz98xnm3XhPqoUkVQ6FQVQjOlsWAfw4"
 CHAT_ID = "622334857"
-SYMBOL = "^NSEI"
+NSE_URL = "https://www.nseindia.com/live_market/dynaContent/live_watch/stock_watch/liveIndexWatchData.json"
+
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Nifty Render Bot is running."
+    return "✅ Nifty Render Bot is running."
 
 @app.route("/ping")
 def ping():
@@ -26,118 +25,54 @@ def ping():
 @app.route("/run")
 def run_analysis():
     try:
-        message = get_technical_summary()
+        message = get_nifty_summary()
         result = send_telegram_message(message)
         print("Telegram response:", result)
         if result.get("ok"):
-            return "Message sent to Telegram!"
+            return "✅ Message sent to Telegram!"
         else:
-            return f"Telegram failed: {result.get('description', 'Unknown error')}"
+            return f"❌ Telegram failed: {result.get('description', 'Unknown error')}"
     except Exception as e:
         print("Error in /run:", e)
         return f"Internal Error: {str(e)}"
 
-def get_technical_summary():
+def get_nifty_summary():
     try:
-        df = yf.download(SYMBOL, period="2d", interval="15m", progress=False)
-        print("Downloaded data:")
-        print(df.tail())
-        if df is None or df.empty:
-            return "No data received from yfinance."
-        df.dropna(inplace=True)
+        res = requests.get(NSE_URL, headers=headers, timeout=10)
+        data = res.json()
+        indices = data.get("data", [])
 
-        close = df["Close"].squeeze()
-        last_price = close.iloc[-1]
+        nifty = next((item for item in indices if item["index"] == "NIFTY 50"), None)
+        if not nifty:
+            return "❌ Unable to fetch Nifty data from NSE."
 
-        rsi = RSIIndicator(close).rsi().iloc[-1]
-        macd = MACD(close)
-        macd_line = macd.macd().iloc[-1]
-        macd_signal = macd.macd_signal().iloc[-1]
+        current = float(nifty["last"])
+        open_price = float(nifty["open"])
+        high = float(nifty["high"])
+        low = float(nifty["low"])
+        prev_close = float(nifty["previousClose"])
 
-        ema5_val = float(close.ewm(span=5).mean().iloc[-1])
-        ema20_val = float(close.ewm(span=20).mean().iloc[-1])
-        ema200_val = float(close.ewm(span=200).mean().iloc[-1])
+        trend = "Bullish" if current > prev_close else "Bearish"
+        support = f"{current - 70:.0f} / {current - 120:.0f}"
+        resistance = f"{current + 70:.0f} / {current + 120:.0f}"
 
-        trend = "Bullish" if ema5_val > ema20_val > ema200_val else "Bearish"
+        msg = f"""📊 *Nifty 50 Live Analysis* – {datetime.now().strftime('%A, %d %B %Y • %H:%M')}
+*Price:* ₹{current:.2f}
+*Trend:* {trend}
+*Open:* ₹{open_price:.2f}
+*High:* ₹{high:.2f}
+*Low:* ₹{low:.2f}
+*Prev Close:* ₹{prev_close:.2f}
 
-        df["VWAP"] = (df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3).cumsum() / df["Volume"].cumsum()
-        vwap = float(df["VWAP"].iloc[-1])
+📌 *Key Levels:*
+Support: {support}
+Resistance: {resistance}
 
-        avg_vol = df["Volume"].rolling(20).mean().iloc[-2]
-        volume_spike = "Yes" if df["Volume"].iloc[-2] > avg_vol * 1.5 else "No"
-
-        supertrend, st_dir = calculate_supertrend(df)
-        st_signal = "BUY" if st_dir.iloc[-1] == 1 else "SELL"
-
-        vix = get_vix()
-        fii = get_fii_dii_data()
-
-        msg = f"""Nifty AI Trade Plan – {datetime.now().strftime('%A, %d %B %Y • %H:%M')}
-Price: ₹{last_price:.2f}
-Trend: {trend}
-
-Indicators:
-- RSI: {rsi:.2f}
-- MACD: {macd_line:.2f} / {macd_signal:.2f}
-- EMA: 5({ema5_val:.2f}), 20({ema20_val:.2f}), 200({ema200_val:.2f})
-- VWAP: {vwap:.2f}
-- Volume Spike: {volume_spike}
-- SuperTrend: {supertrend.iloc[-1]:.2f} ({st_signal})
-
-VIX: {vix if vix else 'Unavailable'}
-{fii}
+🔁 Data Source: NSE India
 """
         return msg
-
     except Exception as e:
-        return f"Error generating summary: {str(e)}"
-
-def calculate_supertrend(df, period=10, multiplier=3):
-    hl2 = (df["High"] + df["Low"]) / 2
-    tr = pd.concat([
-        df["High"] - df["Low"],
-        abs(df["High"] - df["Close"].shift()),
-        abs(df["Low"] - df["Close"].shift())
-    ], axis=1).max(axis=1)
-    atr = tr.rolling(period).mean()
-    upperband = hl2 + multiplier * atr
-    lowerband = hl2 - multiplier * atr
-    supertrend = pd.Series(index=df.index, dtype='float64')
-    direction = pd.Series(index=df.index, dtype='int')
-    for i in range(period, len(df)):
-        if df["Close"].iloc[i] > upperband.iloc[i - 1]:
-            direction.iloc[i] = 1
-        elif df["Close"].iloc[i] < lowerband.iloc[i - 1]:
-            direction.iloc[i] = -1
-        else:
-            direction.iloc[i] = direction.iloc[i - 1] if i > period else 1
-        supertrend.iloc[i] = lowerband.iloc[i] if direction.iloc[i] == 1 else upperband.iloc[i]
-    return supertrend, direction
-
-def get_vix():
-    try:
-        url = "https://www.nseindia.com/market-data/indices-vix"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(res.text, "html.parser")
-        text = soup.get_text()
-        idx = text.find("India VIX")
-        if idx != -1:
-            return float(text[idx:idx+50].split()[2])
-        return None
-    except:
-        return None
-
-def get_fii_dii_data():
-    try:
-        url = "https://www.moneycontrol.com/stocks/marketstats/fii_dii_activity/index.php"
-        res = requests.get(url, timeout=10)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        table = soup.find_all("table")[0]
-        fii_net = table.find_all("tr")[1].find_all("td")[3].text.strip()
-        return f"FII Net: {fii_net}"
-    except:
-        return "FII/DII data unavailable"
+        return f"❌ Error fetching Nifty summary: {str(e)}"
 
 def send_telegram_message(msg):
     try:
