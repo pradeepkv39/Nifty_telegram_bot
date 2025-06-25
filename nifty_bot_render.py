@@ -30,6 +30,8 @@ def run_analysis():
         print("Error in /run:", e)
         return f"Internal Error: {str(e)}"
 
+import time  # Add this at top of your file
+
 def get_nifty_summary():
     try:
         session = requests.Session()
@@ -42,10 +44,11 @@ def get_nifty_summary():
             "Connection": "keep-alive",
         })
 
-        # 1️⃣ First get cookies by visiting homepage
+        # 1️⃣ Visit homepage to get cookies
         session.get("https://www.nseindia.com", timeout=10)
+        time.sleep(1)  # <-- This pause helps avoid 401
 
-        # 2️⃣ Now request live Option Chain data
+        # 2️⃣ Fetch Option Chain data
         response = session.get(
             "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY",
             timeout=10
@@ -58,6 +61,32 @@ def get_nifty_summary():
             data = response.json()
         except:
             return "❌ NSE response not in JSON format. Possibly blocked."
+
+        spot_price = float(data["records"]["underlyingValue"])
+        try:
+            prev_close = spot_price - float(data["filtered"]["data"][0]["CE"]["change"])
+        except:
+            prev_close = spot_price
+
+        trend = "Bullish" if spot_price > prev_close else "Bearish"
+        support = f"{spot_price - 70:.0f} / {spot_price - 120:.0f}"
+        resistance = f"{spot_price + 70:.0f} / {spot_price + 120:.0f}"
+
+        msg = f"""📊 *Nifty 50 Live Analysis* – {datetime.now().strftime('%A, %d %B %Y • %H:%M')}
+*Spot Price:* ₹{spot_price:.2f}
+*Trend:* {trend}
+*Prev Close (approx):* ₹{prev_close:.2f}
+
+📌 *Key Levels:*
+- Support: {support}
+- Resistance: {resistance}
+
+🔁 Data Source: NSE Option Chain API
+"""
+        return msg
+
+    except Exception as e:
+        return f"❌ Error fetching Nifty summary: {str(e)}"
 
         # 3️⃣ Extract spot price and estimate previous close
         spot_price = float(data["records"]["underlyingValue"])
