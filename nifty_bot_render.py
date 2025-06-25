@@ -44,7 +44,7 @@ def get_technical_summary():
             return "No data received from yfinance (market closed or blocked)."
         df.dropna(inplace=True)
 
-        close = df["Close"]
+        close = df["Close"].squeeze()
         last_price = close.iloc[-1]
 
         rsi = RSIIndicator(close).rsi().iloc[-1]
