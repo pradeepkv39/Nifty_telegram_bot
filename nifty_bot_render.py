@@ -39,7 +39,7 @@ def run_analysis():
 
 def get_technical_summary():
     try:
-        df = yf.download(SYMBOL, period="2d", interval="5m", progress=False)
+        df = yf.download(SYMBOL, period="2d", interval="15m", progress=False)
         print("Downloaded data:")
         print(df.tail())
         if df is None or df.empty:
