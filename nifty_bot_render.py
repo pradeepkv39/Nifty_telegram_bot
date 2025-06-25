@@ -74,8 +74,14 @@ def get_fii_dii_data():
         return "FII/DII data unavailable"
 
 def get_technical_summary():
+    try:
     df = yf.download(SYMBOL, period="2d", interval="5m", progress=False)
+    if df is None or df.empty:
+        return "❌ No data received from yfinance (market closed or blocked)."
     df.dropna(inplace=True)
+except Exception as e:
+    print("Error fetching data from yfinance:", e)
+    return f"❌ yfinance failed: {str(e)}"
     close = df["Close"]
     last_price = close.iloc[-1]
 
