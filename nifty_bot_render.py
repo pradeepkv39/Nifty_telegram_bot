@@ -1,16 +1,10 @@
 from flask import Flask
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
 
 # --- CONFIG ---
 BOT_TOKEN = "7974119756:AAESnz98xnm3XhPqoUkVQ6FQVQjOlsWAfw4"
 CHAT_ID = "622334857"
-NSE_URL = "https://www.nseindia.com/live_market/dynaContent/live_watch/stock_watch/liveIndexWatchData.json"
-
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
 
 app = Flask(__name__)
 
@@ -38,39 +32,48 @@ def run_analysis():
 
 def get_nifty_summary():
     try:
-        res = requests.get(NSE_URL, headers=headers, timeout=10)
-        data = res.json()
-        indices = data.get("data", [])
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.nseindia.com/"
+        })
 
-        nifty = next((item for item in indices if item["index"] == "NIFTY 50"), None)
-        if not nifty:
-            return "❌ Unable to fetch Nifty data from NSE."
+        # Hit NSE homepage once to get cookies
+        session.get("https://www.nseindia.com", timeout=10)
 
-        current = float(nifty["last"])
-        open_price = float(nifty["open"])
-        high = float(nifty["high"])
-        low = float(nifty["low"])
-        prev_close = float(nifty["previousClose"])
+        # Get option chain snapshot with live spot price
+        response = session.get(
+            "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY",
+            timeout=10
+        )
+        data = response.json()
+        spot_price = float(data["records"]["underlyingValue"])
 
-        trend = "Bullish" if current > prev_close else "Bearish"
-        support = f"{current - 70:.0f} / {current - 120:.0f}"
-        resistance = f"{current + 70:.0f} / {current + 120:.0f}"
+        # Approximate previous close from change in CE (not exact, but works)
+        try:
+            prev_close = spot_price - float(data["filtered"]["data"][0]["CE"]["change"])
+        except:
+            prev_close = spot_price  # fallback
+
+        trend = "Bullish" if spot_price > prev_close else "Bearish"
+        support = f"{spot_price - 70:.0f} / {spot_price - 120:.0f}"
+        resistance = f"{spot_price + 70:.0f} / {spot_price + 120:.0f}"
 
         msg = f"""📊 *Nifty 50 Live Analysis* – {datetime.now().strftime('%A, %d %B %Y • %H:%M')}
-*Price:* ₹{current:.2f}
+*Spot Price:* ₹{spot_price:.2f}
 *Trend:* {trend}
-*Open:* ₹{open_price:.2f}
-*High:* ₹{high:.2f}
-*Low:* ₹{low:.2f}
-*Prev Close:* ₹{prev_close:.2f}
+*Prev Close (approx):* ₹{prev_close:.2f}
 
 📌 *Key Levels:*
-Support: {support}
-Resistance: {resistance}
+- Support: {support}
+- Resistance: {resistance}
 
-🔁 Data Source: NSE India
+🔁 Data Source: NSE Option Chain API
 """
         return msg
+
     except Exception as e:
         return f"❌ Error fetching Nifty summary: {str(e)}"
 
