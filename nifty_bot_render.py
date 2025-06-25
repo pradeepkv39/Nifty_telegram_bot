@@ -11,7 +11,7 @@ from ta.trend import MACD
 # --- CONFIG ---
 BOT_TOKEN = "7974119756:AAESnz98xnm3XhPqoUkVQ6FQVQjOlsWAfw4"
 CHAT_ID = "622334857"
-SYMBOL = "^NSEI"  # Nifty 50
+SYMBOL = "^NSEI"
 
 app = Flask(__name__)
 
@@ -34,14 +34,14 @@ def run_analysis():
         else:
             return f"Telegram failed: {result.get('description', 'Unknown error')}"
     except Exception as e:
-        print("Error in run_analysis:", e)
+        print("Error in /run:", e)
         return f"Internal Error: {str(e)}"
 
 def get_technical_summary():
     try:
         df = yf.download(SYMBOL, period="2d", interval="5m", progress=False)
         if df is None or df.empty:
-            return "No data received from yfinance (market closed or blocked)."
+            return "No data received from yfinance."
         df.dropna(inplace=True)
 
         close = df["Close"].squeeze()
@@ -52,12 +52,14 @@ def get_technical_summary():
         macd_line = macd.macd().iloc[-1]
         macd_signal = macd.macd_signal().iloc[-1]
 
-        ema5 = float(close.ewm(span=5).mean().iloc[-1])
-        ema20 = float(close.ewm(span=20).mean().iloc[-1])
-        ema200 = float(close.ewm(span=200).mean().iloc[-1])
+        ema5_val = float(close.ewm(span=5).mean().iloc[-1])
+        ema20_val = float(close.ewm(span=20).mean().iloc[-1])
+        ema200_val = float(close.ewm(span=200).mean().iloc[-1])
+
+        trend = "Bullish" if ema5_val > ema20_val > ema200_val else "Bearish"
 
         df["VWAP"] = (df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3).cumsum() / df["Volume"].cumsum()
-        vwap = df["VWAP"].iloc[-1]
+        vwap = float(df["VWAP"].iloc[-1])
 
         avg_vol = df["Volume"].rolling(20).mean().iloc[-2]
         volume_spike = "Yes" if df["Volume"].iloc[-2] > avg_vol * 1.5 else "No"
@@ -65,7 +67,6 @@ def get_technical_summary():
         supertrend, st_dir = calculate_supertrend(df)
         st_signal = "BUY" if st_dir.iloc[-1] == 1 else "SELL"
 
-        trend = "Bullish" if ema5 > ema20 > ema200 else "Bearish"
         vix = get_vix()
         fii = get_fii_dii_data()
 
@@ -76,7 +77,7 @@ Trend: {trend}
 Indicators:
 - RSI: {rsi:.2f}
 - MACD: {macd_line:.2f} / {macd_signal:.2f}
-- EMA: 5({ema5:.2f}), 20({ema20:.2f}), 200({ema200:.2f})
+- EMA: 5({ema5_val:.2f}), 20({ema20_val:.2f}), 200({ema200_val:.2f})
 - VWAP: {vwap:.2f}
 - Volume Spike: {volume_spike}
 - SuperTrend: {supertrend.iloc[-1]:.2f} ({st_signal})
