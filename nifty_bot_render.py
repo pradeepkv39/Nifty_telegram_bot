@@ -9,8 +9,8 @@ from ta.momentum import RSIIndicator
 from ta.trend import MACD
 
 # --- CONFIG ---
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
+BOT_TOKEN = "7974119756:AAESnz98xnm3XhPqoUkVQ6FQVQjOlsWAfw4"
+CHAT_ID = "622334857"
 SYMBOL = "^NSEI"  # Nifty 50
 
 app = Flask(__name__)
